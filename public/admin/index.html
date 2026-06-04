@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fileshare Admin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+    .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; background: #161b22; padding: 1.5rem; border-right: 1px solid #21262d; overflow-y: auto; z-index: 10; }
+    .sidebar h1 { font-size: 1.2rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+    .sidebar .sub { font-size: 0.8rem; color: #8b949e; margin-bottom: 2rem; }
+    .sidebar a { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.8rem; color: #8b949e; text-decoration: none; border-radius: 6px; margin-bottom: 0.25rem; font-size: 0.9rem; cursor: pointer; }
+    .sidebar a:hover, .sidebar a.active { background: #21262d; color: #f0f6fc; }
+    .sidebar a .badge { margin-left: auto; background: #23863633; color: #3fb950; font-size: 0.7rem; padding: 1px 6px; border-radius: 8px; }
+    .main { margin-left: 220px; padding: 2rem; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 1.25rem; }
+    .stat-card .value { font-size: 1.8rem; font-weight: 700; color: #f0f6fc; }
+    .stat-card .label { font-size: 0.8rem; color: #8b949e; margin-top: 0.25rem; }
+
+    .toolbar { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .toolbar input, .toolbar select { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .toolbar input:focus, .toolbar select:focus { outline: none; border-color: #58a6ff; }
+    .toolbar input { flex: 1; min-width: 150px; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar-selected { display: none; background: #1c2333; border: 1px solid #58a6ff33; border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem; align-items: center; gap: 0.75rem; }
+    .toolbar-selected.show { display: flex; }
+    .toolbar-selected .count { color: #f0f6fc; font-weight: 500; }
+    .toolbar-selected .actions { display: flex; gap: 0.5rem; margin-left: auto; }
+
+    .breadcrumb { display: flex; align-items: center; gap: 0.25rem; margin-bottom: 1rem; font-size: 0.9rem; flex-wrap: wrap; }
+    .breadcrumb a { color: #58a6ff; cursor: pointer; text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb .sep { color: #484f58; margin: 0 0.25rem; }
+    .breadcrumb .current { color: #f0f6fc; font-weight: 500; }
+
+    .view-toggle { display: flex; gap: 0.25rem; }
+    .view-toggle button { background: transparent; border: 1px solid #30363d; color: #8b949e; padding: 0.4rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    .view-toggle button.active { background: #21262d; color: #f0f6fc; border-color: #58a6ff; }
+
+    /* Grid view */
+    .grid-view { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; }
+    .grid-item { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 0.75rem; cursor: pointer; transition: all 0.15s; position: relative; }
+    .grid-item:hover { border-color: #30363d; background: #1c2333; }
+    .grid-item.selected { border-color: #58a6ff; background: #1f3a5f33; }
+    .grid-item .icon { font-size: 2.5rem; text-align: center; padding: 1rem 0; }
+    .grid-item .name { font-size: 0.8rem; color: #c9d1d9; word-break: break-word; text-align: center; line-height: 1.3; max-height: 2.6em; overflow: hidden; }
+    .grid-item .size-date { font-size: 0.7rem; color: #484f58; text-align: center; margin-top: 0.25rem; }
+    .grid-item .check { position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 3px; border: 2px solid #484f58; background: transparent; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff; opacity: 0; transition: opacity 0.15s; }
+    .grid-item:hover .check { opacity: 1; }
+    .grid-item.selected .check { opacity: 1; background: #238636; border-color: #238636; }
+    .grid-folder { border-color: #1f6feb44; }
+    .grid-folder .icon { color: #58a6ff; }
+
+    /* List view */
+    .list-view { width: 100%; border-collapse: collapse; }
+    .list-view th { text-align: left; padding: 0.5rem 0.5rem; font-size: 0.75rem; text-transform: uppercase; color: #8b949e; border-bottom: 1px solid #21262d; font-weight: 500; cursor: pointer; user-select: none; }
+    .list-view th:hover { color: #f0f6fc; }
+    .list-view td { padding: 0.5rem 0.5rem; border-bottom: 1px solid #21262d; font-size: 0.9rem; }
+    .list-view tr:hover td { background: #161b22; }
+    .list-view tr.selected td { background: #1f3a5f33; }
+    .list-view .file-name { color: #f0f6fc; word-break: break-word; max-width: 300px; cursor: pointer; }
+    .list-view .file-name:hover { color: #58a6ff; }
+    .list-view .file-size, .list-view .file-date { color: #8b949e; font-size: 0.85rem; white-space: nowrap; }
+    .list-view .folder-row td { cursor: pointer; }
+    .list-view .folder-row:hover td { color: #58a6ff; }
+
+    .file-type-badge { display: inline-block; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .type-image { background: #1f6feb33; color: #58a6ff; }
+    .type-video { background: #8957e533; color: #a371f7; }
+    .type-other { background: #21262d; color: #8b949e; }
+    .embed-dot { color: #3fb950; font-size: 0.7rem; margin-left: 2px; }
+    .copy-link-btn { cursor: pointer; font-size: 1.1rem; opacity: 0.6; }
+    .copy-link-btn:hover { opacity: 1; color: #58a6ff; }
+    .grid-copy-link { font-size: 0.75rem; color: #8b949e; cursor: pointer; padding: 2px 0; text-align: center; }
+    .grid-copy-link:hover { color: #58a6ff; }
+
+    .upload-area { background: #161b22; border: 2px dashed #30363d; border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
+    .upload-area:hover, .upload-area.dragover { border-color: #58a6ff; background: #1c2333; }
+    .upload-area-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .upload-progress { margin-top: 1rem; display: none; }
+    .upload-progress .bar { height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
+    .upload-progress .bar .fill { height: 100%; background: #58a6ff; width: 0%; transition: width 0.3s; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .modal h3 { margin-bottom: 0.5rem; }
+    .modal p { color: #8b949e; font-size: 0.85rem; margin-bottom: 1rem; }
+    .modal .field { margin-bottom: 1rem; }
+    .modal label { display: block; font-size: 0.85rem; color: #8b949e; margin-bottom: 0.25rem; }
+    .modal input, .modal select { width: 100%; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 0.6rem 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .modal input:focus, .modal select:focus { outline: none; border-color: #58a6ff; }
+    .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+
+    .token-list { display: grid; gap: 0.5rem; }
+    .token-item { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: center; }
+    .token-item .info .name { color: #f0f6fc; font-weight: 500; }
+    .token-item .info .meta { font-size: 0.8rem; color: #8b949e; margin-top: 0.25rem; }
+    .token-item .info .link { font-size: 0.8rem; color: #58a6ff; word-break: break-all; }
+    .token-item .actions { display: flex; gap: 0.5rem; }
+    .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; }
+    .badge-enabled { background: #23863633; color: #3fb950; }
+    .badge-disabled { background: #da363333; color: #f85149; }
+
+    .empty-state { text-align: center; padding: 3rem 1rem; color: #8b949e; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 0.5rem; }
+
+    .toast { position: fixed; bottom: 2rem; right: 2rem; background: #238636; color: #fff; padding: 0.75rem 1.25rem; border-radius: 8px; font-size: 0.9rem; opacity: 0; transition: opacity 0.3s; z-index: 200; }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #da3633; }
+
+    /* Context menu */
+    .ctx-menu { display: none; position: fixed; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 0.25rem; z-index: 300; min-width: 160px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .ctx-menu.show { display: block; }
+    .ctx-menu .item { padding: 0.5rem 0.75rem; cursor: pointer; border-radius: 4px; font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; }
+    .ctx-menu .item:hover { background: #21262d; color: #f0f6fc; }
+    .ctx-menu .sep { height: 1px; background: #21262d; margin: 0.25rem 0; }
+
+    /* Inline rename */
+    .rename-input { background: #0d1117; border: 1px solid #58a6ff; color: #f0f6fc; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: inherit; width: 100%; outline: none; }
+
+    @media (max-width: 768px) {
+      .sidebar { position: static; width: 100%; padding: 1rem; border-right: none; border-bottom: 1px solid #21262d; }
+      .sidebar nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+      .sidebar a { margin-bottom: 0; font-size: 0.8rem; padding: 0.4rem 0.6rem; }
+      .main { margin-left: 0; padding: 1rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .grid-view { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+    }
+  .client-row { background:#161b22;border:1px solid #21262d;border-radius:8px;padding:1rem;margin-bottom:.75rem; }
+    .client-row .meta { color:#8b949e;font-size:.8rem;margin-top:.35rem;word-break:break-all; }
+    .client-files { margin-top:.75rem;display:grid;gap:.35rem; }
+    .client-files a { color:#58a6ff;text-decoration:none;font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h1>Fileshare</h1>
+    <div class="sub">Cloud Storage</div>
+    <nav>
+      <a class="active" onclick="showPanel('dashboard')">&#128202; Dashboard</a>
+      <a onclick="showPanel('files')">&#128193; Files</a>
+      <a onclick="showPanel('upload')">&#128228; Upload</a>
+      <a onclick="showPanel('tokens')">&#128279; Share Links</a>
+      <a onclick="showPanel('clients')">&#128100; Clients</a>
+      <a onclick="showPanel('transcodes')">&#9881; Transcodes <span class="badge" id="transcodeBadge" style="display:none;">0</span></a>
+      <a onclick="showPanel('trash')" id="trashLink">&#128465; Trash <span class="badge" id="trashBadge">0</span></a>
+    </nav>
+  </div>
+
+  <div class="main">
+    <!-- Dashboard -->
+    <div class="panel active" id="panel-dashboard">
+      <h2>Dashboard</h2>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- Files -->
+    <div class="panel" id="panel-files">
+      <div class="toolbar">
+        <input type="text" id="fileSearch" placeholder="Search files..." oninput="loadFiles()" />
+        <select id="fileTypeFilter" onchange="loadFiles()">
+          <option value="">All</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn btn-ghost" onclick="createFolder()">+ Folder</button>
+        <button class="btn btn-ghost" onclick="showPanel('upload')">+ Upload</button>
+        <button class="btn btn-ghost" onclick="loadFiles()">&#8635;</button>
+        <div class="view-toggle">
+          <button class="active" onclick="setView('grid')" id="viewGrid" title="Grid view">&#9638;</button>
+          <button onclick="setView('list')" id="viewList" title="List view">&#9776;</button>
+        </div>
+      </div>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <div class="toolbar-selected" id="selectedBar">
+        <span class="count" id="selectedCount">0 selected</span>
+        <div class="actions">
+          <button class="btn btn-sm btn-ghost" onclick="batchTrash()">Move to Trash</button>
+          <button class="btn btn-sm btn-danger" onclick="batchDelete()">Delete Permanently</button>
+        </div>
+      </div>
+      <div id="filesContainer"></div>
+    </div>
+
+    <!-- Upload -->
+    <div class="panel" id="panel-upload">
+      <h2>Upload Files</h2>
+      <p style="color:#8b949e;margin-bottom:1rem;">Upload files to the current folder</p>
+      <div class="upload-area" id="adminDropZone">
+        <div class="upload-area-icon">&#128228;</div>
+        <div>Drop files here or click to browse</div>
+      </div>
+      <input type="file" id="adminFileInput" multiple accept="image/*,video/*" style="display:none" />
+      <div class="upload-progress" id="adminProgress">
+        <div class="bar"><div class="fill" id="adminProgressFill"></div></div>
+        <div style="margin-top:0.5rem;font-size:0.85rem;color:#8b949e;" id="adminUploadStatus"></div>
+      </div>
+      <div id="adminUploadList"></div>
+    </div>
+
+    <!-- Tokens -->
+    <div class="panel" id="panel-tokens">
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="openCreateToken()">Create Share Link</button>
+        <button class="btn btn-ghost" onclick="loadTokens()">Refresh</button>
+      </div>
+      <div id="tokensContainer"></div>
+    </div>
+
+    <!-- Clients -->
+    <div class="panel" id="panel-clients">
+      <div class="toolbar">
+        <h2 style="margin:0;font-size:1.2rem;">Clients</h2>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="createLimitCode()">Generate Upload Password</button>
+        <button class="btn btn-ghost" onclick="loadClients()">Refresh</button>
+      </div>
+      <div id="limitCodesContainer"></div>
+      <div id="clientsContainer"></div>
+    </div>
+
+    <!-- Transcodes -->
+    <div class="panel" id="panel-transcodes">
+      <div class="toolbar">
+        <h2 style="margin:0;font-size:1.2rem;">Active Transcodes</h2>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" onclick="loadTranscodes()">&#8635; Refresh</button>
+      </div>
+      <div id="transcodesContainer"><p style="color:#8b949e;">Loading...</p></div>
+    </div>
+
+    <!-- Trash -->
+    <div class="panel" id="panel-trash">
+      <div class="toolbar">
+        <h2 style="margin:0;font-size:1.2rem;">Trash</h2>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" onclick="loadTrash()">Refresh</button>
+        <button class="btn btn-danger" onclick="emptyTrash()">Empty Trash</button>
+      </div>
+      <p style="color:#8b949e;font-size:0.85rem;margin-bottom:1rem;">Files in trash for 30+ days are automatically deleted.</p>
+      <div id="trashContainer"></div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal-overlay" id="folderModal">
+    <div class="modal">
+      <h3>Create Folder</h3>
+      <p>Create a new folder in the current directory</p>
+      <div class="field">
+        <label>Folder name</label>
+        <input type="text" id="folderName" placeholder="My Folder" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('folderModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="createFolderSubmit()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="moveModal">
+    <div class="modal">
+      <h3>Move to Folder</h3>
+      <p id="moveModalDesc">Select destination folder</p>
+      <div class="field">
+        <label>Destination</label>
+        <select id="moveFolderSelect"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('moveModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="moveSubmit()">Move</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="tokenModal">
+    <div class="modal">
+      <h3>Create Share Link</h3>
+      <p>Send this link to friends so they can upload files</p>
+      <div class="field">
+        <label>Label / Name</label>
+        <input type="text" id="tokenName" placeholder="e.g. Bob's files" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal('tokenModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="createToken()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctx-menu" id="ctxMenu"></div>
+  <div class="toast" id="toast"></div>
+
+  <script src="/vendor/tus.min.js"></script>
+  <script>
+    // Auth
+    const token = localStorage.getItem('fileshare_token');
+    if (!token) { window.location.href = '/admin/login'; }
+
+    let LOCAL_UPLOAD_URL = null;
+    fetch('/api/local-check').then(r => r.json()).then(d => {
+      if (d.local) { LOCAL_UPLOAD_URL = d.localUrl; return; }
+      (d.localIPs || []).forEach(ip => {
+        const url = 'http://' + ip + ':' + (location.port || 3000);
+        const c = new AbortController(); setTimeout(() => c.abort(), 1500);
+        fetch(url + '/api/ping', { signal: c.signal, mode: 'no-cors' }).then(() => { LOCAL_UPLOAD_URL = url; }).catch(() => {});
+      });
+    }).catch(() => {});
+
+    let currentView = 'grid';
+    let currentDir = '';
+    let selectedFiles = new Set();
+    let allDirs = [];
+    let ctxTarget = null;
+
+    function api(path, opts) {
+      opts = opts || {};
+      opts.headers = opts.headers || {};
+      opts.headers['Authorization'] = 'Bearer ' + token;
+      return fetch(path, opts).then(r => {
+        if (r.status === 401) { localStorage.removeItem('fileshare_token'); window.location.href = '/admin/login'; }
+        return r;
+      });
+    }
+
+    // --- Navigation ---
+    function showPanel(name) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+      document.getElementById('panel-' + name).classList.add('active');
+      document.querySelector('.sidebar a[onclick*="' + name + '"]')?.classList.add('active');
+      document.getElementById('ctxMenu').classList.remove('show');
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'files') loadFiles();
+      if (name === 'tokens') loadTokens();
+      if (name === 'clients') loadClients();
+      if (name === 'transcodes') loadTranscodes();
+      if (name === 'trash') loadTrash();
+    }
+
+    // Auto-refresh transcodes every 3 seconds when tab is visible
+    // Auto-refresh transcodes every 2 seconds, update badge globally
+    setInterval(async () => {
+      try {
+        const t = localStorage.getItem('fileshare_token');
+        if (!t) return;
+        const res = await fetch('/api/admin/transcodes', { headers: { 'Authorization': 'Bearer ' + t } });
+        if (!res.ok) return;
+        const jobs = await res.json();
+        const running = jobs.filter(j => j.steps.some(s => s.status === 'running')).length;
+        const badge = document.getElementById('transcodeBadge');
+        if (running > 0) { badge.textContent = running; badge.style.display = ''; }
+        else badge.style.display = 'none';
+        const panel = document.getElementById('panel-transcodes');
+        if (panel && panel.classList.contains('active')) renderTranscodes(jobs);
+      } catch {}
+    }, 2000);
+
+    // --- Toast ---
+    let toastTimeout;
+    function toast(msg, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    // --- Dashboard ---
+    async function loadDashboard() {
+      try {
+        const res = await api('/api/admin/stats');
+        const data = await res.json();
+        document.getElementById('statsGrid').innerHTML = `
+          <div class="stat-card"><div class="value">${data.totalFiles}</div><div class="label">Active Files</div></div>
+          <div class="stat-card"><div class="value">${data.trashedFiles || 0}</div><div class="label">Trashed</div></div>
+          <div class="stat-card"><div class="value">${formatSize(data.totalSize)}</div><div class="label">Total Size</div></div>
+          <div class="stat-card"><div class="value">${data.totalDownloads}</div><div class="label">Downloads</div></div>
+          <div class="stat-card"><div class="value">${data.activeTokens}</div><div class="label">Share Links</div></div>
+          <div class="stat-card"><div class="value">${data.clients || 0}</div><div class="label">Browsers</div></div>
+          <div class="stat-card"><div class="value">${data.bannedClients || 0}</div><div class="label">Banned</div></div>
+          <div class="stat-card"><div class="value">${formatSize(data.publicBytes || 0)}</div><div class="label">Public Used</div></div>
+          <div class="stat-card"><div class="value">${data.folders || 0}</div><div class="label">Folders</div></div>
+        `;
+      } catch (e) {
+        document.getElementById('statsGrid').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load stats</div></div>';
+      }
+    }
+
+    // --- Files ---
+    async function loadDirs() {
+      try {
+        const res = await api('/api/admin/dirs');
+        allDirs = await res.json();
+      } catch { allDirs = []; }
+    }
+
+    function getDirPath(dirId) {
+      const path = [];
+      let current = dirId;
+      while (current) {
+        const dir = allDirs.find(d => d.id === current);
+        if (!dir) break;
+        path.unshift(dir);
+        current = dir.parent || '';
+      }
+      return path;
+    }
+
+    function renderBreadcrumb(dirId) {
+      const path = getDirPath(dirId);
+      let html = '<a onclick="navigateTo(\'\')">Root</a>';
+      for (const d of path) {
+        html += '<span class="sep">/</span><a onclick="navigateTo(\'' + d.id + '\')">' + escapeHtml(d.name) + '</a>';
+      }
+      if (dirId) {
+        html += '<span class="sep">/</span><span class="current">' + escapeHtml(path[path.length-1]?.name || '') + '</span>';
+      }
+      document.getElementById('breadcrumb').innerHTML = html;
+    }
+
+    function navigateTo(dirId) {
+      currentDir = dirId || '';
+      selectedFiles.clear();
+      document.getElementById('selectedBar').classList.remove('show');
+      loadFiles();
+    }
+
+    async function loadFiles() {
+      await loadDirs();
+      renderBreadcrumb(currentDir);
+      const search = document.getElementById('fileSearch').value;
+      const type = document.getElementById('fileTypeFilter').value;
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (type) params.set('type', type);
+      params.set('dir', currentDir);
+
+      try {
+        const res = await api('/api/admin/files?' + params.toString());
+        const files = await res.json();
+
+        // Get subfolders
+        const subDirs = allDirs.filter(d => (d.parent || '') === currentDir);
+
+        if (subDirs.length === 0 && files.length === 0) {
+          document.getElementById('filesContainer').innerHTML = '<div class="empty-state"><div class="icon">&#128193;</div><div>This folder is empty</div></div>';
+          return;
+        }
+
+        let html = '<div class="' + (currentView === 'grid' ? 'grid-view' : '') + '" id="fileView">';
+        if (currentView === 'grid') {
+          // Folders
+          for (const d of subDirs) {
+            html += '<div class="grid-item grid-folder" onclick="navigateTo(\'' + d.id + '\')" oncontextmenu="showCtx(event,\'dir\',\'' + d.id + '\',\'' + escapeHtml(d.name) + '\')">' +
+              '<div class="icon">&#128193;</div>' +
+              '<div class="name">' + escapeHtml(d.name) + '</div>' +
+              '<div class="size-date">Folder</div>' +
+              '</div>';
+          }
+          // Files
+          for (const f of files) {
+            if (!f.exists) continue;
+            const typeLabel = f.mime.startsWith('image/') ? 'Image' : f.mime.startsWith('video/') ? 'Video' : 'File';
+            const isSelected = selectedFiles.has(f.id);
+            const icon = f.mime.startsWith('image/') ? '&#128444;' : f.mime.startsWith('video/') ? '&#127916;' : '&#128196;';
+            html += '<div class="grid-item' + (isSelected ? ' selected' : '') + '" ondblclick="renameFile(\'' + f.id + '\',\'' + escapeHtml(f.filename) + '\')" oncontextmenu="showCtx(event,\'file\',\'' + f.id + '\',\'' + escapeHtml(f.filename) + '\')">' +
+              '<div class="check" onclick="event.stopPropagation();toggleSelect(\'' + f.id + '\')">' + (isSelected ? '&#10003;' : '') + '</div>' +
+              '<div class="icon" onclick="window.open(\'' + f.links.view + '\',\'_blank\')">' + icon + '</div>' +
+              '<div class="name">' + escapeHtml(f.filename) + (f.embed ? '<span class="embed-dot">&#9679;</span>' : '') + (f.previewName ? '<span style="color:#3fb950;font-size:0.7rem;margin-left:4px">compressed</span>' : '') + '</div>' +
+              '<div class="size-date">' + formatSize(f.size) + (f.savedBytes > 0 ? ' <span style="color:#3fb950;font-size:0.75rem">(saved ' + formatSize(f.savedBytes) + ')</span>' : '') + '</div>' +
+              '<div class="grid-copy-link" onclick="event.stopPropagation();copyToClipboard(\'' + f.links.view.replace(/'/g, "\\'") + '\')" title="Copy share link">&#128279; Copy Link</div>' +
+              '</div>';
+          }
+        } else {
+          html = '<table class="list-view"><thead><tr><th style="width:30px"><input type="checkbox" onchange="toggleAll(this.checked)" /></th><th onclick="sortFiles(\'name\')">Name</th><th onclick="sortFiles(\'size\')">Size</th><th onclick="sortFiles(\'type\')">Type</th><th onclick="sortFiles(\'date\')">Date</th><th>DL</th><th style="width:60px">Link</th></tr></thead><tbody>';
+          // Folders
+          for (const d of subDirs) {
+            html += '<tr class="folder-row" onclick="navigateTo(\'' + d.id + '\')" oncontextmenu="showCtx(event,\'dir\',\'' + d.id + '\',\'' + escapeHtml(d.name) + '\')">' +
+              '<td></td><td colspan="6" style="color:#58a6ff;">&#128193; ' + escapeHtml(d.name) + '</td></tr>';
+          }
+          // Files
+          for (const f of files) {
+            if (!f.exists) continue;
+            const isSelected = selectedFiles.has(f.id);
+            const typeLabel = f.mime.startsWith('image/') ? 'Image' : f.mime.startsWith('video/') ? 'Video' : 'File';
+            const typeClass = f.mime.startsWith('image/') ? 'type-image' : f.mime.startsWith('video/') ? 'type-video' : 'type-other';
+            html += '<tr class="' + (isSelected ? 'selected' : '') + '" oncontextmenu="showCtx(event,\'file\',\'' + f.id + '\',\'' + escapeHtml(f.filename) + '\')">' +
+              '<td><input type="checkbox" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSelect(\'' + f.id + '\')" onclick="event.stopPropagation()" /></td>' +
+              '<td class="file-name" ondblclick="renameFile(\'' + f.id + '\',\'' + escapeHtml(f.filename) + '\')" onclick="window.open(\'' + f.links.view + '\',\'_blank\')">' + escapeHtml(f.filename) + (f.embed ? '<span class="embed-dot"> &#9679;</span>' : '') + (f.previewName ? ' <span style="color:#3fb950;font-size:0.7rem">compressed</span>' : '') + '</td>' +
+              '<td class="file-size">' + formatSize(f.size) + (f.savedBytes > 0 ? ' <span style="color:#3fb950;font-size:0.7rem">(-' + formatSize(f.savedBytes) + ')</span>' : '') + '</td>' +
+              '<td><span class="file-type-badge ' + typeClass + '">' + typeLabel + '</span></td>' +
+              '<td class="file-date">' + new Date(f.uploadedAt).toLocaleDateString() + '</td>' +
+              '<td class="file-dl" style="color:#8b949e;font-size:0.85rem;">' + (f.downloads || 0) + '</td>' +
+              '<td><span class="copy-link-btn" onclick="event.stopPropagation();copyToClipboard(\'' + f.links.view.replace(/'/g, "\\'") + '\')" title="Copy share link">&#128279;</span></td></tr>';
+          }
+          html += '</tbody></table>';
+        }
+        document.getElementById('filesContainer').innerHTML = html;
+        updateSelectedBar();
+      } catch (e) {
+        document.getElementById('filesContainer').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load files</div></div>';
+      }
+    }
+
+    function setView(view) {
+      currentView = view;
+      document.getElementById('viewGrid').className = view === 'grid' ? 'active' : '';
+      document.getElementById('viewList').className = view === 'list' ? 'active' : '';
+      loadFiles();
+    }
+
+    function toggleSelect(id) {
+      if (selectedFiles.has(id)) selectedFiles.delete(id);
+      else selectedFiles.add(id);
+      updateSelectedBar();
+      loadFiles();
+    }
+
+    function toggleAll(checked) {
+      selectedFiles.clear();
+      if (checked) {
+        const params = new URLSearchParams({ dir: currentDir });
+        const search = document.getElementById('fileSearch').value;
+        const type = document.getElementById('fileTypeFilter').value;
+        if (search) params.set('search', search);
+        if (type) params.set('type', type);
+        api('/api/admin/files?' + params.toString()).then(r => r.json()).then(files => {
+          for (const f of files) selectedFiles.add(f.id);
+          updateSelectedBar();
+          loadFiles();
+        });
+      } else {
+        updateSelectedBar();
+        loadFiles();
+      }
+    }
+
+    function updateSelectedBar() {
+      const bar = document.getElementById('selectedBar');
+      const count = document.getElementById('selectedCount');
+      if (selectedFiles.size > 0) {
+        bar.classList.add('show');
+        count.textContent = selectedFiles.size + ' selected';
+      } else {
+        bar.classList.remove('show');
+      }
+    }
+
+    async function batchTrash() {
+      if (selectedFiles.size === 0) return;
+      if (!confirm('Move ' + selectedFiles.size + ' file(s) to trash?')) return;
+      try {
+        const res = await api('/api/admin/files/batch-trash', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [...selectedFiles] })
+        });
+        const r = await res.json();
+        toast(r.trashed + ' file(s) moved to trash');
+        selectedFiles.clear();
+        loadFiles();
+        updateTrashBadge();
+      } catch { toast('Failed', true); }
+    }
+
+    async function batchDelete() {
+      if (selectedFiles.size === 0) return;
+      if (!confirm('Permanently delete ' + selectedFiles.size + ' file(s)? This cannot be undone.')) return;
+      try {
+        const res = await api('/api/admin/files/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [...selectedFiles] })
+        });
+        const r = await res.json();
+        toast(r.deleted + ' file(s) deleted');
+        selectedFiles.clear();
+        loadFiles();
+      } catch { toast('Failed', true); }
+    }
+
+    // --- Context Menu ---
+    function showCtx(event, type, id, name) {
+      event.preventDefault();
+      ctxTarget = { type, id, name };
+      const menu = document.getElementById('ctxMenu');
+      let items = '';
+      if (type === 'file') {
+        items = '<div class="item" onclick="ctxAction(\'rename\')">&#9998; Rename</div>' +
+          '<div class="item" onclick="ctxAction(\'move\')">&#128194; Move to folder</div>' +
+          '<div class="item" onclick="ctxAction(\'download\')">&#8595; Download</div>' +
+          '<div class="sep"></div>' +
+          '<div class="item" onclick="ctxAction(\'trash\')">&#128465; Move to Trash</div>' +
+          '<div class="item" onclick="ctxAction(\'delete\')" style="color:#f85149;">&#10005; Delete permanently</div>';
+      } else {
+        items = '<div class="item" onclick="ctxAction(\'rename\')">&#9998; Rename folder</div>' +
+          '<div class="item" onclick="ctxAction(\'delete\')" style="color:#f85149;">&#10005; Delete folder</div>';
+      }
+      menu.innerHTML = items;
+      menu.style.left = event.clientX + 'px';
+      menu.style.top = event.clientY + 'px';
+      menu.classList.add('show');
+    }
+
+    document.addEventListener('click', () => document.getElementById('ctxMenu').classList.remove('show'));
+
+    function ctxAction(action) {
+      document.getElementById('ctxMenu').classList.remove('show');
+      if (!ctxTarget) return;
+      if (action === 'rename') {
+        if (ctxTarget.type === 'file') renameFile(ctxTarget.id, ctxTarget.name);
+        else renameFolder(ctxTarget.id, ctxTarget.name);
+      } else if (action === 'move') {
+        openMoveModal(ctxTarget.id);
+      } else if (action === 'download') {
+        window.open('/f/' + ctxTarget.id + '/raw', '_blank');
+      } else if (action === 'trash') {
+        trashFile(ctxTarget.id);
+      } else if (action === 'delete') {
+        if (ctxTarget.type === 'file') deleteFile(ctxTarget.id);
+        else deleteFolder(ctxTarget.id);
+      }
+    }
+
+    // --- File Operations ---
+    async function trashFile(id) {
+      try {
+        const res = await api('/api/admin/files/' + id + '/trash', { method: 'POST' });
+        if (res.ok) { toast('Moved to trash'); loadFiles(); updateTrashBadge(); }
+        else toast('Failed', true);
+      } catch { toast('Failed', true); }
+    }
+
+    async function deleteFile(id) {
+      if (!confirm('Permanently delete this file?')) return;
+      try {
+        const res = await api('/api/admin/files/' + id, { method: 'DELETE' });
+        if (res.ok) { toast('Deleted'); loadFiles(); }
+        else toast('Delete failed', true);
+      } catch { toast('Delete failed', true); }
+    }
+
+    function renameFile(id, currentName) {
+      const newName = prompt('Rename file:', currentName);
+      if (!newName || newName === currentName) return;
+      api('/api/admin/files/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: newName })
+      }).then(r => {
+        if (r.ok) { toast('Renamed'); loadFiles(); }
+        else toast('Rename failed', true);
+      }).catch(() => toast('Rename failed', true));
+    }
+
+    // --- Folder Operations ---
+    function createFolder() {
+      document.getElementById('folderName').value = '';
+      document.getElementById('folderModal').classList.add('open');
+    }
+
+    async function createFolderSubmit() {
+      const name = document.getElementById('folderName').value.trim();
+      if (!name) { toast('Enter a folder name', true); return; }
+      try {
+        const res = await api('/api/admin/dirs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, parent: currentDir })
+        });
+        if (res.ok) { toast('Folder created'); closeModal('folderModal'); loadFiles(); }
+        else toast('Failed', true);
+      } catch { toast('Failed', true); }
+    }
+
+    function renameFolder(id, currentName) {
+      const newName = prompt('Rename folder:', currentName);
+      if (!newName || newName === currentName) return;
+      api('/api/admin/dirs/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      }).then(r => {
+        if (r.ok) { toast('Renamed'); loadFiles(); }
+        else toast('Rename failed', true);
+      }).catch(() => toast('Rename failed', true));
+    }
+
+    async function deleteFolder(id) {
+      if (!confirm('Delete this folder and move its files to root?')) return;
+      try {
+        const res = await api('/api/admin/dirs/' + id, { method: 'DELETE' });
+        if (res.ok) { toast('Folder deleted'); loadFiles(); }
+        else toast('Delete failed', true);
+      } catch { toast('Delete failed', true); }
+    }
+
+    // --- Move Modal ---
+    function openMoveModal(fileId) {
+      ctxTarget = { type: 'file', id: fileId };
+      const sel = document.getElementById('moveFolderSelect');
+      sel.innerHTML = '<option value="">Root</option>';
+      for (const d of allDirs) {
+        sel.innerHTML += '<option value="' + d.id + '">' + escapeHtml(d.name) + '</option>';
+      }
+      document.getElementById('moveModalDesc').textContent = 'Move file to folder';
+      document.getElementById('moveModal').classList.add('open');
+    }
+
+    async function moveSubmit() {
+      const dest = document.getElementById('moveFolderSelect').value;
+      if (!ctxTarget || ctxTarget.type !== 'file') return;
+      try {
+        const res = await api('/api/admin/files/' + ctxTarget.id + '/move', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: dest })
+        });
+        if (res.ok) { toast('Moved'); closeModal('moveModal'); loadFiles(); }
+        else toast('Move failed', true);
+      } catch { toast('Move failed', true); }
+    }
+
+    // --- Trash ---
+    async function loadTrash() {
+      try {
+        const res = await api('/api/admin/files?trash=1');
+        const files = await res.json();
+
+        if (files.length === 0) {
+          document.getElementById('trashContainer').innerHTML = '<div class="empty-state"><div class="icon">&#128465;</div><div>Trash is empty</div></div>';
+          return;
+        }
+
+        let html = '<table class="list-view"><thead><tr><th>Name</th><th>Size</th><th>Type</th><th>Trashed</th><th></th></tr></thead><tbody>';
+        for (const f of files) {
+          const typeClass = f.mime.startsWith('image/') ? 'type-image' : f.mime.startsWith('video/') ? 'type-video' : 'type-other';
+          const typeLabel = f.mime.startsWith('image/') ? 'Image' : f.mime.startsWith('video/') ? 'Video' : 'File';
+          html += '<tr>' +
+            '<td class="file-name">' + escapeHtml(f.filename) + '</td>' +
+            '<td class="file-size">' + formatSize(f.size) + '</td>' +
+            '<td><span class="file-type-badge ' + typeClass + '">' + typeLabel + '</span></td>' +
+            '<td style="color:#8b949e;font-size:0.85rem;">' + (f.trashedAt ? new Date(f.trashedAt).toLocaleDateString() : '?') + '</td>' +
+            '<td class="actions-cell">' +
+              '<button class="btn btn-sm btn-ghost" onclick="restoreFile(\'' + f.id + '\')">Restore</button> ' +
+              '<button class="btn btn-sm btn-danger" onclick="deleteFile(\'' + f.id + '\')">Delete forever</button>' +
+            '</td></tr>';
+        }
+        html += '</tbody></table>';
+        document.getElementById('trashContainer').innerHTML = html;
+      } catch (e) {
+        document.getElementById('trashContainer').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load trash</div></div>';
+      }
+    }
+
+    async function restoreFile(id) {
+      try {
+        const res = await api('/api/admin/files/' + id + '/restore', { method: 'POST' });
+        if (res.ok) { toast('Restored'); loadTrash(); updateTrashBadge(); }
+        else toast('Restore failed', true);
+      } catch { toast('Restore failed', true); }
+    }
+
+    async function emptyTrash() {
+      if (!confirm('Permanently delete all trashed files?')) return;
+      try {
+        const res = await api('/api/admin/trash/empty', { method: 'POST' });
+        const r = await res.json();
+        toast(r.purged + ' files permanently deleted');
+        loadTrash();
+        updateTrashBadge();
+      } catch { toast('Failed', true); }
+    }
+
+    async function updateTrashBadge() {
+      try {
+        const res = await api('/api/admin/trash/count');
+        const data = await res.json();
+        document.getElementById('trashBadge').textContent = data.count || 0;
+      } catch {}
+    }
+
+    // --- Upload (existing with local detection) ---
+    const adminDropZone = document.getElementById('adminDropZone');
+    const adminFileInput = document.getElementById('adminFileInput');
+    adminDropZone.addEventListener('click', () => adminFileInput.click());
+    adminDropZone.addEventListener('dragover', (e) => { e.preventDefault(); adminDropZone.classList.add('dragover'); });
+    adminDropZone.addEventListener('dragleave', () => adminDropZone.classList.remove('dragover'));
+    adminDropZone.addEventListener('drop', (e) => { e.preventDefault(); adminDropZone.classList.remove('dragover'); uploadAdminFiles(e.dataTransfer.files); });
+    adminFileInput.addEventListener('change', () => { uploadAdminFiles(adminFileInput.files); adminFileInput.value = ''; });
+
+    const browserId = localStorage.getItem('fileshare_browser_id') || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+    localStorage.setItem('fileshare_browser_id', browserId);
+
+    async function uploadTusAdmin(file, onProgress) {
+      const startTime = Date.now();
+      return new Promise((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: '/api/tus',
+          chunkSize: 64 * 1024 * 1024,
+          retryDelays: [0, 1000, 3000, 5000],
+          metadata: { filename: file.name, filetype: file.type || 'application/octet-stream', token: 'admin' },
+          headers: { 'Authorization': 'Bearer ' + token, 'X-Browser-Id': browserId },
+          onError: reject,
+          onProgress: (sent, total) => {
+            const pct = total ? sent / total * 100 : 0;
+            const elapsed = (Date.now() - startTime) / 1000;
+            onProgress(pct, sent, elapsed);
+          },
+          onSuccess: async () => {
+            const id = upload.url.split('/').pop();
+            for (let i = 0; i < 30; i++) {
+              const res = await api('/api/tus/' + encodeURIComponent(id) + '/result');
+              if (res.status === 200) return resolve(await res.json());
+              await new Promise(r => setTimeout(r, 500));
+            }
+            resolve({ success: true, file: { id, filename: file.name }, url: '/f/' + id });
+          }
+        });
+        upload.findPreviousUploads().then(previous => {
+          if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+          upload.start();
+        }).catch(reject);
+      });
+    }
+
+    async function uploadAdminFiles(files) {
+      const progressBar = document.getElementById('adminProgress');
+      const progressFill = document.getElementById('adminProgressFill');
+      const status = document.getElementById('adminUploadStatus');
+      const list = document.getElementById('adminUploadList');
+
+      progressBar.style.display = 'block';
+
+      for (const file of files) {
+        status.textContent = 'Uploading ' + file.name + '...';
+        try {
+          const result = await uploadTusAdmin(file, (pct, sent, elapsed) => {
+            progressFill.style.width = pct + '%';
+            if (elapsed > 0.5 && sent > 0) {
+              const speed = formatSize(Math.round(sent / elapsed)) + '/s';
+              status.textContent = 'Uploading ' + file.name + ' — ' + speed;
+            }
+          });
+          const fullUrl = window.location.origin + result.url;
+          list.innerHTML = '<div style="padding:0.75rem;background:#23863622;border-radius:6px;color:#3fb950;margin-bottom:0.5rem;">' +
+            '<div style="font-size:0.85rem;margin-bottom:0.4rem;">Uploaded: <strong>' + escapeHtml(result.file.filename || file.name) + '</strong></div>' +
+            '<div style="display:flex;align-items:center;gap:0.5rem;background:#0d1117;border:1px solid #30363d;border-radius:4px;padding:0.4rem 0.6rem;cursor:pointer;" onclick="copyToClipboard(\'' + fullUrl.replace(/'/g, "\\'") + '\')">' +
+            '<span style="flex:1;color:#58a6ff;font-size:0.8rem;word-break:break-all;">' + fullUrl + '</span>' +
+            '<span style="background:#238636;color:#fff;font-size:0.7rem;padding:1px 6px;border-radius:3px;">Copy</span>' +
+            '</div></div>' + list.innerHTML;
+          status.textContent = 'Done: ' + file.name;
+        } catch (err) {
+          status.textContent = 'Failed: ' + file.name + ': ' + err.message;
+          list.innerHTML = '<div style="padding:0.75rem;background:#da363322;border-radius:6px;color:#f85149;">Failed: ' + escapeHtml(file.name) + '</div>' + list.innerHTML;
+        }
+        progressFill.style.width = '0%';
+      }
+      progressBar.style.display = 'none';
+      loadFiles();
+    }
+
+    // --- Clients / Limits ---
+    async function loadClients() {
+      try {
+        const [clientsRes, codesRes] = await Promise.all([api('/api/admin/clients'), api('/api/admin/limit-codes')]);
+        const clients = await clientsRes.json();
+        const codes = await codesRes.json();
+        document.getElementById('limitCodesContainer').innerHTML = '<div class="toolbar">' + codes.slice(0, 6).map(c =>
+          '<span class="badge ' + (c.enabled ? 'badge-enabled' : 'badge-disabled') + '">' + escapeHtml(c.label) + ': ' + c.code + '</span>'
+        ).join(' ') + '</div>';
+        if (!clients.length) {
+          document.getElementById('clientsContainer').innerHTML = '<div class="empty-state"><div class="icon">&#128100;</div><div>No clients yet</div></div>';
+          return;
+        }
+        document.getElementById('clientsContainer').innerHTML = clients.map(c => {
+          const files = (c.recentFiles || []).map(f => '<a href="' + f.url + '" target="_blank">' + escapeHtml(f.filename) + ' - ' + formatSize(f.size) + '</a>').join('');
+          const quotaBytes = c.quotaOverrideBytes || -1;
+          const quotaLabel = quotaBytes > 0 ? formatSize(quotaBytes) : (quotaBytes === -1 ? '10 GB (default)' : 'Unlimited');
+          const speed = c.avgSpeed ? formatSize(c.avgSpeed) + '/s' : '-';
+          const nick = c.nickname ? escapeHtml(c.nickname) : '';
+          const displayName = nick ? nick + ' <span style="color:#8b949e;font-size:.75rem;">(' + escapeHtml(c.id).slice(0, 8) + '...)</span>' : '<span style="color:#8b949e;">' + escapeHtml(c.id).slice(0, 12) + '...</span>';
+          return '<div class="client-row">' +
+            '<div style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;flex-wrap:wrap;">' +
+            '<div>' + displayName + ' <span style="color:#58a6ff;font-size:.8rem;">⬆ ' + speed + '</span></div>' +
+            '<span style="color:#8b949e;font-size:.8rem;">' + formatSize(c.uploadedBytes || 0) + ' / ' + quotaLabel + ' (' + (c.uploadedFiles || 0) + ' files)</span>' +
+            '<div style="display:flex;gap:.25rem;">' +
+            '<button class="btn btn-sm btn-ghost" onclick="setClientQuota(\'' + c.id.replace(/'/g, "\\'") + '\')">Quota</button>' +
+            '<button class="btn btn-sm ' + (c.banned ? 'btn-primary' : 'btn-danger') + '" onclick="setClientBan(\'' + c.id.replace(/'/g, "\\'") + '\',' + !c.banned + ')">' + (c.banned ? 'Unban' : 'Ban') + '</button></div></div>' +
+            '<div class="meta">IPs: ' + escapeHtml((c.ips || []).join(', ')) + '</div>' +
+            '<div class="meta">Last seen: ' + (c.lastSeen ? new Date(c.lastSeen).toLocaleString() : '?') + '</div>' +
+            '<div class="client-files">' + files + '</div></div>';
+        }).join('');
+      } catch {
+        document.getElementById('clientsContainer').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load clients</div></div>';
+      }
+    }
+
+    async function setClientBan(id, banned) {
+      const res = await api('/api/admin/clients/' + encodeURIComponent(id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ banned })
+      });
+      if (res.ok) { toast(banned ? 'Client banned' : 'Client unbanned'); loadClients(); loadDashboard(); }
+      else toast('Failed', true);
+    }
+
+    async function setClientQuota(id) {
+      const gB = prompt('Enter new quota in GB (0 = unlimited):', '');
+      if (gB === null) return;
+      const bytes = Number(gB) === 0 ? 0 : Number(gB) * 1024 * 1024 * 1024;
+      if (isNaN(bytes) || bytes < 0) { toast('Invalid number', true); return; }
+      const res = await api('/api/admin/clients/' + encodeURIComponent(id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotaOverrideBytes: bytes === 0 ? 0 : bytes })
+      });
+      if (res.ok) { toast(bytes === 0 ? 'Quota set to unlimited' : 'Quota set to ' + gB + ' GB'); loadClients(); }
+      else toast('Failed', true);
+    }
+
+    async function createLimitCode() {
+      const label = prompt('Password label:', 'Trusted uploader') || 'Trusted uploader';
+      const res = await api('/api/admin/limit-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, days: 14 })
+      });
+      const code = await res.json();
+      if (res.ok) { copyToClipboard(code.code); toast('Upload password copied'); loadClients(); }
+      else toast('Failed', true);
+    }
+
+    // --- Tokens ---
+    async function loadTokens() {
+      try {
+        const res = await api('/api/admin/tokens');
+        const tokens = await res.json();
+        if (tokens.length === 0) {
+          document.getElementById('tokensContainer').innerHTML = '<div class="empty-state"><div class="icon">&#128279;</div><div>No share links yet</div></div>';
+          return;
+        }
+        let html = '<div class="token-list">';
+        for (const t of tokens) {
+          html += '<div class="token-item"><div class="info">' +
+            '<div class="name">' + escapeHtml(t.name || 'Unnamed') + ' <span class="badge ' + (t.enabled ? 'badge-enabled' : 'badge-disabled') + '">' + (t.enabled ? 'Active' : 'Disabled') + '</span></div>' +
+            '<div class="meta">Created ' + new Date(t.createdAt).toLocaleDateString() + '</div>' +
+            '<div class="link">' + t.link + '</div></div>' +
+            '<div class="actions">' +
+            '<button class="btn btn-sm btn-ghost" onclick="copyToClipboard(\'' + t.link + '\')">Copy</button> ' +
+            '<button class="btn btn-sm ' + (t.enabled ? 'btn-ghost' : 'btn-primary') + '" onclick="toggleToken(\'' + t.id + '\',' + !t.enabled + ')">' + (t.enabled ? 'Disable' : 'Enable') + '</button> ' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteToken(\'' + t.id + '\')">Delete</button></div></div>';
+        }
+        html += '</div>';
+        document.getElementById('tokensContainer').innerHTML = html;
+      } catch {
+        document.getElementById('tokensContainer').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load share links</div></div>';
+      }
+    }
+
+    function openCreateToken() {
+      document.getElementById('tokenName').value = '';
+      document.getElementById('tokenModal').classList.add('open');
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    async function createToken() {
+      const name = document.getElementById('tokenName').value.trim() || 'Unnamed';
+      try {
+        const res = await api('/api/admin/tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        if (res.ok) { toast('Share link created!'); closeModal('tokenModal'); loadTokens(); }
+        else toast('Failed to create', true);
+      } catch { toast('Failed to create', true); }
+    }
+
+    async function toggleToken(id, enabled) {
+      try {
+        const res = await api('/api/admin/tokens/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        if (res.ok) { toast(enabled ? 'Enabled' : 'Disabled'); loadTokens(); }
+        else toast('Failed', true);
+      } catch { toast('Failed', true); }
+    }
+
+    async function deleteToken(id) {
+      if (!confirm('Delete this share link?')) return;
+      try {
+        const res = await api('/api/admin/tokens/' + id, { method: 'DELETE' });
+        if (res.ok) { toast('Deleted'); loadTokens(); }
+        else toast('Delete failed', true);
+      } catch { toast('Delete failed', true); }
+    }
+
+    // --- Transcodes ---
+    async function loadTranscodes() {
+      try {
+        const res = await api('/api/admin/transcodes');
+        const jobs = await res.json();
+        renderTranscodes(jobs);
+      } catch {
+        document.getElementById('transcodesContainer').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div><div>Failed to load transcodes</div></div>';
+      }
+    }
+
+    function renderTranscodes(jobs) {
+      const container = document.getElementById('transcodesContainer');
+      if (jobs.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">&#9881;</div><div>No active or recent transcodes</div></div>';
+        return;
+      }
+      let html = '';
+      for (const job of jobs) {
+        const lastStep = job.steps[job.steps.length - 1] || {};
+        const running = lastStep.status === 'running';
+        const done = lastStep.status === 'done';
+        const error = lastStep.status === 'error';
+        const statusIcon = running ? '&#9203;' : done ? '&#9989;' : error ? '&#10060;' : '&#11093;';
+        html += '<div class="client-row" style="margin-bottom:0.75rem;">' +
+          '<div style="display:flex;align-items:center;gap:0.75rem;">' +
+          '<span style="font-size:1.2rem;">' + statusIcon + '</span>' +
+          '<div style="flex:1;min-width:0;">' +
+          '<div style="color:#f0f6fc;font-weight:500;word-break:break-word;">' + escapeHtml(job.filename) + '</div>' +
+          '<div class="meta" style="margin-top:0.2rem;">';
+        for (const s of job.steps) {
+          const sIcon = s.status === 'running' ? '&#9203;' : s.status === 'done' ? '&#9989;' : s.status === 'error' ? '&#10060;' : '&#11093;';
+          html += '<span style="margin-right:0.75rem;font-size:0.8rem;">' + sIcon + ' ' + escapeHtml(s.name || '?') + '</span>';
+        }
+        html += '</div>';
+        if (running && lastStep.output && lastStep.output.length > 0) {
+          const lines = lastStep.output.slice(-3).join('').split('\n').filter(Boolean).slice(-3).join('\n');
+          html += '<pre style="font-size:0.7rem;color:#8b949e;margin-top:0.5rem;max-height:60px;overflow:hidden;background:#0d1117;padding:0.5rem;border-radius:4px;white-space:pre-wrap;word-break:break-all;">' + escapeHtml(lines) + '</pre>';
+        }
+        if (error && lastStep.error) {
+          html += '<div style="color:#f85149;font-size:0.8rem;margin-top:0.25rem;">' + escapeHtml(lastStep.error) + '</div>';
+        }
+        html += '</div></div></div>';
+      }
+      container.innerHTML = html;
+    }
+
+    // --- Utilities ---
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => toast('Copied!')).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        toast('Copied!');
+      });
+    }
+
+    function sortFiles(field) {
+      // Simple client-side sort indicator - relies on re-fetch from server
+      toast('Sorting by ' + field);
+      loadFiles();
+    }
+
+    function formatSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Init
+    loadDashboard();
+    updateTrashBadge();
+
+    // Close modals on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('open'); });
+    });
+  </script>
+</body>
+</html>

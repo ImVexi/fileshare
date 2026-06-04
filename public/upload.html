@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share a file - Fileshare</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { max-width: 480px; width: 100%; padding: 1rem; }
+    .card { background: #161b22; border: 1px solid #21262d; border-radius: 12px; padding: 2rem; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    h1 { font-size: 1.4rem; color: #f0f6fc; margin-bottom: 0.3rem; }
+    .subtitle { color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .drop-zone { border: 2px dashed #30363d; border-radius: 10px; padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #58a6ff; background: rgba(88,166,255,0.05); }
+    .drop-zone-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .drop-zone-text { color: #8b949e; font-size: 0.95rem; }
+    .file-input { display: none; }
+    .progress-wrap { margin-top: 1rem; display: none; }
+    .progress-bar { height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
+    .progress-bar .fill { height: 100%; background: #58a6ff; width: 0%; transition: width 0.3s; }
+    .status { margin-top: 0.75rem; font-size: 0.9rem; color: #8b949e; text-align: center; }
+    .status.success { color: #3fb950; }
+    .status.error { color: #f85149; }
+    .result-box { margin-top: 1rem; display: none; }
+    .result-box .label { font-size: 0.8rem; color: #8b949e; margin-bottom: 0.3rem; }
+    .result-box .link-display { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 0.6rem 0.75rem; font-size: 0.85rem; word-break: break-all; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+    .result-box .link-display:hover { border-color: #58a6ff; }
+    .result-box .link-display .url { color: #58a6ff; flex: 1; }
+    .result-box .link-display .hint { color: #8b949e; font-size: 0.75rem; flex-shrink: 0; }
+    .result-box .link-display .copied { display: none; background: #238636; color: #fff; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; }
+    .footer { margin-top: 1.5rem; text-align: center; font-size: 0.8rem; color: #484f58; }
+  .usage { margin-bottom: 1rem; padding: 0.75rem 1rem; background: #0d1117; border: 1px solid #21262d; border-radius: 8px; color: #8b949e; font-size: 0.85rem; }
+    .limit-password { width: 100%; margin-top: 0.75rem; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; padding: 0.65rem 0.75rem; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Share a file</h1>
+      <p class="subtitle">Upload a file — the link owner will see it</p>
+      <div class="usage" id="usageBox">Checking quota...</div>
+      <div style="display:flex;gap:.5rem;margin-bottom:.75rem;">
+        <input id="nickname" placeholder="Your nickname (optional)" style="flex:1;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:.5rem .75rem;border-radius:6px;font-size:.9rem;" />
+        <button onclick="saveNickname()" style="background:#238636;color:#fff;border:none;padding:.5rem .75rem;border-radius:6px;cursor:pointer;font-size:.85rem;">Save</button>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-zone-icon">&#128228;</div>
+        <div class="drop-zone-text">Tap to choose a file or drag it here</div>
+      </div>
+      <input class="limit-password" id="uploadPassword" placeholder="Upload password (removes limits)" autocomplete="off" />
+      <input type="file" class="file-input" id="fileInput" accept="image/*,video/*" />
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+        <div class="status" id="status"></div>
+      </div>
+      <div class="result-box" id="resultBox">
+        <div class="label">Your file was uploaded. Share this link:</div>
+        <div class="link-display" id="linkDisplay">
+          <span class="url" id="linkUrl"></span>
+          <span class="hint">click to copy</span>
+          <span class="copied" id="copiedBadge">Copied!</span>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Powered by Fileshare</div>
+  </div>
+
+  <script src="/vendor/tus.min.js"></script>
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const status = document.getElementById('status');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const resultBox = document.getElementById('resultBox');
+    const linkUrl = document.getElementById('linkUrl');
+    const linkDisplay = document.getElementById('linkDisplay');
+    const copiedBadge = document.getElementById('copiedBadge');
+
+    const token = window.location.pathname.split('/').pop();
+    let LOCAL_UPLOAD_URL = null;
+    const browserId = getOrCreateBrowserId();
+    const uploadPassword = document.getElementById('uploadPassword');
+    refreshUsage();
+    loadNickname();
+    fetch('/api/local-check').then(r => r.json()).then(d => {
+      if (d.local) { LOCAL_UPLOAD_URL = d.localUrl; return; }
+      (d.localIPs || []).forEach(ip => {
+        const url = 'http://' + ip + ':' + (location.port || 3000);
+        const c = new AbortController(); setTimeout(() => c.abort(), 1500);
+        fetch(url + '/api/ping', { signal: c.signal, mode: 'no-cors' }).then(() => { LOCAL_UPLOAD_URL = url; }).catch(() => {});
+      });
+    }).catch(() => {});
+
+    function getOrCreateBrowserId() {
+      let id = localStorage.getItem('fileshare_browser_id');
+      if (!id) {
+        id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem('fileshare_browser_id', id);
+      }
+      return id;
+    }
+
+    async function refreshUsage() {
+      try {
+        const res = await fetch('/api/me', { headers: { 'X-Browser-Id': browserId } });
+        const data = await res.json();
+        document.getElementById('nickname').value = data.nickname || '';
+        const speedStr = data.avgSpeed ? ' | Avg speed: ' + formatSize(data.avgSpeed) + '/s' : '';
+        document.getElementById('usageBox').textContent = 'Used ' + formatSize(data.usedBytes || 0) + ' of ' + formatSize(data.limitBytes || 0) + ' across ' + (data.uploadedFiles || 0) + ' upload(s)' + speedStr + (data.banned ? ' — uploading disabled' : '');
+      } catch {
+        document.getElementById('usageBox').textContent = 'Quota info unavailable';
+      }
+    }
+
+    async function loadNickname() {
+      try {
+        const res = await fetch('/api/me', { headers: { 'X-Browser-Id': browserId } });
+        const data = await res.json();
+        if (data.nickname) document.getElementById('nickname').value = data.nickname;
+      } catch {}
+    }
+
+    async function saveNickname() {
+      const nick = document.getElementById('nickname').value.trim();
+      try {
+        await fetch('/api/me/nickname', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Browser-Id': browserId }, body: JSON.stringify({ nickname: nick }) });
+        refreshUsage();
+      } catch {}
+    }
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); fileInput.value = ''; });
+
+    async function uploadTus(file, onProgress) {
+      const metadata = { filename: file.name, filetype: file.type || 'application/octet-stream', token };
+      const startTime = Date.now();
+      return new Promise((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: '/api/tus',
+          chunkSize: 64 * 1024 * 1024,
+          retryDelays: [0, 1000, 3000, 5000],
+          metadata,
+          headers: {
+            'X-Browser-Id': browserId,
+            'X-Upload-Password': uploadPassword.value.trim()
+          },
+          onError: reject,
+          onProgress: (sent, total) => {
+            const pct = total ? sent / total * 100 : 0;
+            const elapsed = (Date.now() - startTime) / 1000;
+            onProgress(pct, sent, elapsed);
+          },
+          onSuccess: async () => {
+            const id = upload.url.split('/').pop();
+            for (let i = 0; i < 30; i++) {
+              const res = await fetch('/api/tus/' + encodeURIComponent(id) + '/result', { headers: { 'X-Browser-Id': browserId } });
+              if (res.status === 200) return resolve(await res.json());
+              await new Promise(r => setTimeout(r, 500));
+            }
+            resolve({ success: true, file: { id }, url: '/f/' + id });
+          }
+        });
+        upload.findPreviousUploads().then(previous => {
+          if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
+          upload.start();
+        }).catch(reject);
+      });
+    }
+
+    async function uploadFile(file) {
+      if (!file) return;
+      progressWrap.style.display = 'block';
+      resultBox.style.display = 'none';
+      status.className = 'status';
+      status.textContent = 'Uploading ' + file.name + '...';
+
+      try {
+        let result = await uploadTus(file, (pct, sent, elapsed) => {
+          progressFill.style.width = pct + '%';
+          if (elapsed > 0.5 && sent > 0) {
+            const speed = formatSize(Math.round(sent / elapsed)) + '/s';
+            status.textContent = 'Uploading ' + file.name + ' — ' + speed;
+          }
+        });
+
+        const fullUrl = window.location.origin + result.url;
+        status.className = 'status success';
+        status.textContent = 'Uploaded successfully!';
+        linkUrl.textContent = fullUrl;
+        resultBox.style.display = 'block';
+        progressFill.style.width = '0%';
+          refreshUsage();
+      } catch (err) {
+        status.className = 'status error';
+        status.textContent = 'Upload failed: ' + err.message;
+        progressFill.style.width = '0%';
+          refreshUsage();
+      }
+    }
+
+    linkDisplay.addEventListener('click', function() {
+      const text = linkUrl.textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        copiedBadge.style.display = 'inline';
+        this.querySelector('.hint').style.display = 'none';
+        setTimeout(() => {
+          copiedBadge.style.display = 'none';
+          this.querySelector('.hint').style.display = 'inline';
+        }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>

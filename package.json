@@ -1,0 +1,19 @@
+{
+  "name": "fileshare",
+  "version": "1.0.0",
+  "description": "Self-hosted file sharing with Discord embeds and Cloudflare tunnel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup-tunnel": "cloudflared service install eyJhIjoiZDhiNTc2YmE4MzJhN2U1NzIwMGNiZDFlNDMxZDkwMjciLCJ0IjoiMzI5MTE0YjItZmY0MC00MzQzLWExMGItMjY2ZmQ5ZjRlNjMzIiwicyI6Ik9UWmhNbUZoWVRBdE1EVTNNQzAwTlRGaExUa3hNV010TkdGbU1XTTNNek5pT1dZNSJ9"
+  },
+  "dependencies": {
+    "@tus/file-store": "^2.1.0",
+    "@tus/server": "^2.4.1",
+    "express": "^4.18.2",
+    "mime-types": "^2.1.35",
+    "multer": "^1.4.5-lts.1",
+    "tus-js-client": "^4.3.1",
+    "uuid": "^9.0.0"
+  }
+}
