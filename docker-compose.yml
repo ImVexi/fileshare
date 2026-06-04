@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   fileshare:
     build: .
@@ -8,8 +7,6 @@ services:
       - "3000:3001"
     environment:
       PORT: 3001
-      PUBLIC_URL: https://share.vextroboomin.xyz
-      ADMIN_PASSWORD: "8762"
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads

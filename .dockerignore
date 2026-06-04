@@ -1,0 +1,8 @@
+node_modules
+uploads
+data
+EMBED
+*.md
+*.log
+*.bat
+.git
